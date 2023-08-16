@@ -147,12 +147,12 @@ func (c *Control) GetUDPAddr() string {
 }
 
 func (c *Control) KillPendingTunnel(vpnIp net.IP) bool {
-	hostinfo, ok := c.f.handshakeManager.pendingHostMap.Hosts[iputil.Ip2VpnIp(vpnIp)]
-	if !ok {
+	hostinfo := c.f.handshakeManager.QueryVpnIp(iputil.Ip2VpnIp(vpnIp))
+	if hostinfo == nil {
 		return false
 	}
 
-	c.f.handshakeManager.pendingHostMap.DeleteHostInfo(hostinfo)
+	c.f.handshakeManager.DeleteHostInfo(hostinfo)
 	return true
 }
 
@@ -161,7 +161,7 @@ func (c *Control) GetHostmap() *HostMap {
 }
 
 func (c *Control) GetCert() *cert.NebulaCertificate {
-	return c.f.certState.Load().certificate
+	return c.f.pki.GetCertState().Certificate
 }
 
 func (c *Control) ReHandshake(vpnIp iputil.VpnIp) {
