@@ -3,8 +3,8 @@
 /nebula-arm
 /nebula-arm6
 /nebula-darwin
-/nebula.exe
-/nebula-cert.exe
+/build/windows-amd64/nebula.exe
+/build/windows-amd64/nebula-cert.exe
 /coverage.out
 /cpu.pprof
 /build

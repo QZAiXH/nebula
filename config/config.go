@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,19 +124,38 @@ func (c *C) HasChanged(k string) bool {
 // CatchHUP will listen for the HUP signal in a go routine and reload all configs found in the
 // original path provided to Load. The old settings are shallow copied for change detection after the reload.
 func (c *C) CatchHUP(ctx context.Context) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGHUP)
+	sigCh := make(chan os.Signal, 1)
+	txtCh := make(chan string, 1)
+
+	// 在非windows系统下接收 SIGHUP 信号
+	// 在windows系统下接收 Interrupt 信号 (Ctrl+C)
+	if runtime.GOOS == "windows" {
+		go func() {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				txtCh <- scanner.Text()
+			}
+		}()
+	} else {
+		signal.Notify(sigCh, syscall.SIGHUP)
+	}
 
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				signal.Stop(ch)
-				close(ch)
+				signal.Stop(sigCh)
+				close(sigCh)
+				close(txtCh)
 				return
-			case <-ch:
+			case <-sigCh:
 				c.l.Info("Caught HUP, reloading config")
 				c.ReloadConfig()
+			case text := <-txtCh:
+				if runtime.GOOS == "windows" && text == "reload" {
+					c.l.Info("User input 'reload', reloading config")
+					c.ReloadConfig()
+				}
 			}
 		}
 	}()
