@@ -1,21 +1,18 @@
 package config
 
 import (
-	"bufio"
-	"context"
 	"errors"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"dario.cat/mergo"
@@ -123,42 +120,53 @@ func (c *C) HasChanged(k string) bool {
 
 // CatchHUP will listen for the HUP signal in a go routine and reload all configs found in the
 // original path provided to Load. The old settings are shallow copied for change detection after the reload.
-func (c *C) CatchHUP(ctx context.Context) {
-	sigCh := make(chan os.Signal, 1)
-	txtCh := make(chan string, 1)
+func (c *C) CatchHUP() {
+	debounceTime := 1 * time.Second
+	watcher, err := fsnotify.NewWatcher()
 
-	// 在非windows系统下接收 SIGHUP 信号
-	// 在windows系统下接收 Interrupt 信号 (Ctrl+C)
-	if runtime.GOOS == "windows" {
-		go func() {
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				txtCh <- scanner.Text()
-			}
-		}()
-	} else {
-		signal.Notify(sigCh, syscall.SIGHUP)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer watcher.Close()
+
+	err = watcher.Add(c.path)
+	if err != nil {
+		c.l.Errorf("Error while watching config: %s", err.Error())
 	}
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				signal.Stop(sigCh)
-				close(sigCh)
-				close(txtCh)
-				return
-			case <-sigCh:
-				c.l.Info("Caught HUP, reloading config")
-				c.ReloadConfig()
-			case text := <-txtCh:
-				if runtime.GOOS == "windows" && text == "reload" {
-					c.l.Info("User input 'reload', reloading config")
-					c.ReloadConfig()
+	var timer *time.Timer
+	var debouncedEvents bool
+
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Op&fsnotify.Remove == fsnotify.Remove {
+				err = watcher.Add(c.path)
+				if err != nil {
+					c.l.Errorf("Error while watching config: %s", err.Error())
 				}
+				continue
 			}
+
+			debouncedEvents = true
+			c.l.Infof("Received event: %s", event)
+
+			if timer != nil {
+				timer.Reset(debounceTime)
+			} else {
+				timer = time.AfterFunc(debounceTime, func() {
+					if debouncedEvents {
+						c.l.Info("Caught HUP, reloading config")
+						c.ReloadConfig()
+						debouncedEvents = false
+					}
+					timer = nil
+				})
+			}
+		case err = <-watcher.Errors:
+			c.l.Errorf("Error while watching config: %s", err.Error())
 		}
-	}()
+	}
 }
 
 func (c *C) ReloadConfig() {

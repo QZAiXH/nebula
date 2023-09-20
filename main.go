@@ -123,7 +123,7 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 
 	var tun overlay.Device
 	if !configTest {
-		c.CatchHUP(ctx)
+		go c.CatchHUP()
 
 		tun, err = overlay.NewDeviceFromConfig(c, l, tunCidr, tunFd, routines)
 		if err != nil {
