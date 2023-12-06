@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
-	"io/ioutil"
 	"log"
 	"math"
 	"os"
