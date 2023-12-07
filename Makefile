@@ -24,7 +24,7 @@ endif
 # Only defined the build number if we haven't already
 ifndef BUILD_NUMBER
 	ifeq ($(shell git describe --exact-match 2>$(NULL_FILE)),)
-		BUILD_NUMBER = $(shell git describe --abbrev=0 --match "v*" | cut -dv -f2)-$(shell git branch --show-current)-$(shell git describe --long --dirty | cut -d- -f2-)
+		BUILD_NUMBER = $(shell git branch --show-current)-$(shell git rev-parse --short HEAD)
 	else
 		BUILD_NUMBER = $(shell git describe --exact-match --dirty | cut -dv -f2)
 	endif
