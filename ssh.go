@@ -90,14 +90,19 @@ func configSSH(l *logrus.Logger, ssh *sshd.SSHServer, c *config.C) (func(), erro
 	}
 
 	//TODO: no good way to reload this right now
-	hostKeyFile := c.GetString("sshd.host_key", "")
-	if hostKeyFile == "" {
+	hostKeyPathOrKey := c.GetString("sshd.host_key", "")
+	if hostKeyPathOrKey == "" {
 		return nil, fmt.Errorf("sshd.host_key must be provided")
 	}
 
-	hostKeyBytes, err := os.ReadFile(hostKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("error while loading sshd.host_key file: %s", err)
+	var hostKeyBytes []byte
+	if strings.Contains(hostKeyPathOrKey, "-----BEGIN") {
+		hostKeyBytes = []byte(hostKeyPathOrKey)
+	} else {
+		hostKeyBytes, err = os.ReadFile(hostKeyPathOrKey)
+		if err != nil {
+			return nil, fmt.Errorf("error while loading sshd.host_key file: %s", err)
+		}
 	}
 
 	err = ssh.SetHostKey(hostKeyBytes)
@@ -934,7 +939,7 @@ func sshPrintTunnel(ifce *Interface, fs interface{}, a []string, w sshd.StringWr
 		enc.SetIndent("", "    ")
 	}
 
-	return enc.Encode(copyHostInfo(hostInfo, ifce.hostMap.preferredRanges))
+	return enc.Encode(copyHostInfo(hostInfo, ifce.hostMap.GetPreferredRanges()))
 }
 
 func sshReload(c *config.C, w sshd.StringWriter) error {
