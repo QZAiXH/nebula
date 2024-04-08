@@ -121,20 +121,20 @@ func (c *C) HasChanged(k string) bool {
 // CatchHUP will listen for the HUP signal in a go routine and reload all configs found in the
 // original path provided to Load. The old settings are shallow copied for change detection after the reload.
 func (c *C) CatchHUP(ctx context.Context) {
-	debounceTime := 1 * time.Second
-	watcher, err := fsnotify.NewWatcher()
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer watcher.Close()
-
-	err = watcher.Add(c.path)
-	if err != nil {
-		c.l.Errorf("Error while watching config: %s", err.Error())
-	}
-
 	go func() {
+		debounceTime := 1 * time.Second
+		watcher, err := fsnotify.NewWatcher()
+
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer watcher.Close()
+
+		err = watcher.Add(c.path)
+		if err != nil {
+			c.l.Errorf("Error while watching config: %s", err.Error())
+		}
+
 		var timer *time.Timer
 		var debouncedEvents bool
 
