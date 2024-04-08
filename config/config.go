@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
@@ -119,7 +120,7 @@ func (c *C) HasChanged(k string) bool {
 
 // CatchHUP will listen for the HUP signal in a go routine and reload all configs found in the
 // original path provided to Load. The old settings are shallow copied for change detection after the reload.
-func (c *C) CatchHUP() {
+func (c *C) CatchHUP(ctx context.Context) {
 	debounceTime := 1 * time.Second
 	watcher, err := fsnotify.NewWatcher()
 
@@ -133,39 +134,43 @@ func (c *C) CatchHUP() {
 		c.l.Errorf("Error while watching config: %s", err.Error())
 	}
 
-	var timer *time.Timer
-	var debouncedEvents bool
+	go func() {
+		var timer *time.Timer
+		var debouncedEvents bool
 
-	for {
-		select {
-		case event := <-watcher.Events:
-			if event.Op&fsnotify.Remove == fsnotify.Remove {
-				err = watcher.Add(c.path)
-				if err != nil {
-					c.l.Errorf("Error while watching config: %s", err.Error())
-				}
-				continue
-			}
-
-			debouncedEvents = true
-			c.l.Infof("Received event: %s", event)
-
-			if timer != nil {
-				timer.Reset(debounceTime)
-			} else {
-				timer = time.AfterFunc(debounceTime, func() {
-					if debouncedEvents {
-						c.l.Info("Caught HUP, reloading config")
-						c.ReloadConfig()
-						debouncedEvents = false
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-watcher.Events:
+				if event.Op&fsnotify.Remove == fsnotify.Remove {
+					err = watcher.Add(c.path)
+					if err != nil {
+						c.l.Errorf("Error while watching config: %s", err.Error())
 					}
-					timer = nil
-				})
+					continue
+				}
+
+				debouncedEvents = true
+				c.l.Infof("Received event: %s", event)
+
+				if timer != nil {
+					timer.Reset(debounceTime)
+				} else {
+					timer = time.AfterFunc(debounceTime, func() {
+						if debouncedEvents {
+							c.l.Info("Caught HUP, reloading config")
+							c.ReloadConfig()
+							debouncedEvents = false
+						}
+						timer = nil
+					})
+				}
+			case err = <-watcher.Errors:
+				c.l.Errorf("Error while watching config: %s", err.Error())
 			}
-		case err = <-watcher.Errors:
-			c.l.Errorf("Error while watching config: %s", err.Error())
 		}
-	}
+	}()
 }
 
 func (c *C) ReloadConfig() {

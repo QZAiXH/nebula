@@ -126,7 +126,7 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 
 	var tun overlay.Device
 	if !configTest {
-		go c.CatchHUP()
+		c.CatchHUP(ctx)
 
 		if deviceFactory == nil {
 			deviceFactory = overlay.NewDeviceFromConfig
